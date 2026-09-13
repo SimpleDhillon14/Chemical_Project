@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Reversible Reaction{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Reversible Reaction: A ⇌ R</h4>
+  <p>Forward rate constant k₁, reverse rate constant k₂. At equilibrium: K<sub>C</sub> = k₁/k₂ = C<sub>Re</sub>/C<sub>Ae</sub>.</p>
+  <div class="equation-box">-ln[(C<sub>A</sub> - C<sub>Ae</sub>) / (C<sub>A0</sub> - C<sub>Ae</sub>)] = [(M+1)/(M+X<sub>Ae</sub>)]·k₁·t</div>
+  <p><b>X-axis = t</b>, <b>Y-axis = -ln[(C<sub>A</sub>-C<sub>Ae</sub>)/(C<sub>A0</sub>-C<sub>Ae</sub>)]</b>.
+  The slope gives k₁ (and hence k₂ via K<sub>C</sub>).</p>
+</div>
+
+<div class="panel">
+  <h4>Enter Experimental Data</h4>
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <label class="form-label">Initial concentration of R, C<sub>R0</sub> <span id="CR0unitLabel" class="text-muted"></span></label>
+      <input type="number" step="any" class="form-control" id="CR0input" placeholder="e.g. 0">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Equilibrium concentration of A, C<sub>Ae</sub> <span id="CAeUnitLabel" class="text-muted"></span></label>
+      <input type="number" step="any" class="form-control" id="CAeinput" placeholder="e.g. 2.0">
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Upload CSV (Time, Concentration = C_A)</label>
+      <input type="file" id="csvUpload" accept=".csv" class="form-control">
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="kinetics-table" id="dataTableEl">
+      <thead><tr><th>Time</th><th>C_A</th><th></th></tr></thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-outline-quiet btn-sm mt-2" onclick="addRow('dataTableBody', false)">+ Add Row</button>
+  <div id="formError" style="display:none;" class="mt-3"></div>
+  <button class="btn btn-quiet mt-3" onclick="runAnalysis()">Analyze</button>
+</div>
+
+{% include "results.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+injectUnitSelectors('dataTableEl');
+for (let i = 0; i < 5; i++) addRow('dataTableBody', false);
+bindCSVUpload('csvUpload', 'dataTableBody', false, 'formError');
+
+function syncConcUnits() {
+  const sel = document.getElementById('concUnitSel');
+  if (!sel) return;
+  const a = document.getElementById('CR0unitLabel');
+  const b = document.getElementById('CAeUnitLabel');
+  if (a) a.innerHTML = '(' + sel.value + ')';
+  if (b) b.innerHTML = '(' + sel.value + ')';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  syncConcUnits();
+  document.getElementById('concUnitSel')?.addEventListener('change', syncConcUnits);
+});
+
+let lastResult = null;
+
+async function runAnalysis() {
+  hideError('formError');
+  const payload = collectTableData('dataTableBody', false);
+  payload.CR0 = document.getElementById('CR0input').value;
+  payload.CAe = document.getElementById('CAeinput').value;
+  if (payload.CR0 === '' || payload.CAe === '') { showError('formError', 'Please enter both C_R0 and C_Ae.'); return; }
+  document.getElementById('resultsWrapper').style.display = 'none';
+  toggleLoading('loadingSpinner', true);
+  try {
+    const resp = await fetch('/analyze/reversible', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    toggleLoading('loadingSpinner', false);
+    if (!data.ok) { showError('formError', data.error); return; }
+    lastResult = data.result;
+    renderRevResult(data.result);
+  } catch (e) {
+    toggleLoading('loadingSpinner', false);
+    showError('formError', 'Request failed: ' + e);
+  }
+}
+
+function renderRevResult(r) {
+  document.getElementById('resultsWrapper').style.display = 'block';
+  renderInputTable('inputDataTable', r.input_data);
+  document.getElementById('selectedMethodText').innerText = r.method;
+  document.getElementById('originalEquation').innerHTML = formatMath(r.original_equation);
+
+  renderTransformedTable('transformedTable', r.transformed_table, [
+    {key: 'time', label: 'Time'},
+    {key: 'CA', label: 'C_A'},
+    {key: 'y', label: '-ln[(C_A-C_Ae)/(C_A0-C_Ae)]'},
+  ]);
+
+  renderGraph('mainGraph', r.graph, 'Reversible Reaction');
+  document.getElementById('extraGraphs').innerHTML =
+    `<p class="mt-2">M = ${fmt(r.M)}, X_Ae = ${fmt(r.XAe)}, K_C = ${fmt(r.KC)}, C_Re = ${fmt(r.CRe)}</p>`;
+
+  renderSteps('stepsContainer', r.steps);
+
+  const u = getUnits();
+  renderResultCards('resultCards', [
+    {label: 'k₁ (forward)', value: fmt(r.k1) + ' ' + kUnitsFirstOrder(u.time)},
+    {label: 'k₂ (reverse)', value: fmt(r.k2) + ' ' + kUnitsFirstOrder(u.time)},
+    {label: 'K_C (dimensionless)', value: fmt(r.KC)},
+    {label: 'R²', value: fmt(r.regression.r2)},
+  ]);
+  document.getElementById('predictResult').innerHTML = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('predictMode').addEventListener('change', () => {
+    const mode = document.getElementById('predictMode').value;
+    document.getElementById('predictInputLabel').innerText = (mode === 'concentration') ? 'Time, t' : 'Concentration, C_A';
+  });
+});
+
+async function runPrediction() {
+  if (!lastResult) return;
+  const mode = document.getElementById('predictMode').value;
+  const value = parseFloat(document.getElementById('predictInput').value);
+  const box = document.getElementById('predictResult');
+  if (isNaN(value)) { box.innerHTML = '<div class="alert-quiet-error">Enter a valid number.</div>'; return; }
+  const params = { k1: lastResult.k1, k2: lastResult.k2, CA0: lastResult.CA0, CAe: lastResult.CAe, CR0: lastResult.CR0 };
+  try {
+    const resp = await fetch('/predict/reversible', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mode, value, params })
+    });
+    const data = await resp.json();
+    if (!data.ok) { box.innerHTML = `<div class="alert-quiet-error">${data.error}</div>`; return; }
+    box.innerHTML = `<div class="alert-quiet-success"><b>${data.label}</b> = ${fmt(data.value, 6)}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="alert-quiet-error">Request failed: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Integral Method{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Integral Method of Analysis</h4>
+  <p>Assumes a single-reactant nth-order rate law <b>-r<sub>A</sub> = -dC<sub>A</sub>/dt = k·C<sub>A</sub><sup>n</sup></b>.
+  The order is guessed, the rate law is integrated, and the data is tested for linearity:</p>
+  <ul>
+    <li><b>n = 1</b>: plot -ln(C<sub>A</sub>/C<sub>A0</sub>) vs. t &mdash; slope = k</li>
+    <li><b>n ≠ 1</b>: plot C<sub>A</sub><sup>1-n</sup> vs. t &mdash; slope = (n-1)k, intercept = C<sub>A0</sub><sup>1-n</sup></li>
+  </ul>
+  <p>The app scans orders from 0 to 3 (step 0.05) and reports the best-fitting order, including fractional orders.</p>
+</div>
+
+<div class="panel">
+  <h4>Enter Experimental Data</h4>
+  <div class="mb-3">
+    <label class="form-label">Upload CSV (columns: Time, Concentration)</label>
+    <input type="file" id="csvUpload" accept=".csv" class="form-control">
+  </div>
+  <div style="overflow-x:auto">
+    <table class="kinetics-table" id="dataTableEl">
+      <thead><tr><th>Time</th><th>Concentration</th><th></th></tr></thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-outline-quiet btn-sm mt-2" onclick="addRow('dataTableBody', false)">+ Add Row</button>
+  <div id="formError" style="display:none;" class="mt-3"></div>
+  <button class="btn btn-quiet mt-3" onclick="runAnalysis()">Analyze</button>
+</div>
+
+{% include "results.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+injectUnitSelectors('dataTableEl');
+for (let i = 0; i < 5; i++) addRow('dataTableBody', false);
+bindCSVUpload('csvUpload', 'dataTableBody', false, 'formError');
+
+let lastResult = null;
+
+async function runAnalysis() {
+  hideError('formError');
+  const payload = collectTableData('dataTableBody', false);
+  document.getElementById('resultsWrapper').style.display = 'none';
+  toggleLoading('loadingSpinner', true);
+  try {
+    const resp = await fetch('/analyze/integral', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    toggleLoading('loadingSpinner', false);
+    if (!data.ok) { showError('formError', data.error); return; }
+    lastResult = data.result;
+    renderIntegralResult(data.result);
+  } catch (e) {
+    toggleLoading('loadingSpinner', false);
+    showError('formError', 'Request failed: ' + e);
+  }
+}
+
+function renderIntegralResult(r) {
+  document.getElementById('resultsWrapper').style.display = 'block';
+  renderInputTable('inputDataTable', r.input_data);
+  document.getElementById('selectedMethodText').innerText = r.method;
+  document.getElementById('originalEquation').innerHTML = formatMath(r.original_equation);
+
+  renderTransformedTable('transformedTable', r.transformed_table, [
+    {key: 'time', label: 'Time'},
+    {key: 'concentration', label: 'C_A'},
+    {key: 'y', label: r.y_label}
+  ]);
+
+  renderGraph('mainGraph', r.graph, `Integral Method: n = ${r.best_order.toFixed(2)}`);
+
+  // Order-by-order narrative + comparison table (0 -> 1 -> 2 -> 3), best row highlighted
+  const narrative = buildOrderNarrative(r.comparison_table);
+  let cmp = `<h5 class="mt-4">Order Comparison: Checking Each Order in Turn</h5>` + narrative.html;
+  cmp += `<div style="overflow-x:auto"><table class="kinetics-table">
+  <thead><tr><th>Order (n)</th><th>Slope</th><th>Intercept</th><th>R&sup2;</th><th>k</th><th>Valid?</th></tr></thead><tbody>`;
+  r.comparison_table.forEach(c => {
+    const isBest = narrative.best && c.order === narrative.best.order;
+    cmp += `<tr${isBest ? ' style="background:#eaf1ea;font-weight:700;"' : ''}><td>${c.order}</td><td>${fmt(c.slope)}</td><td>${fmt(c.intercept)}</td><td>${fmt(c.r2)}</td><td>${fmt(c.k)}</td><td>${c.physically_valid ? '✅' : '❌'}</td></tr>`;
+  });
+  cmp += `</tbody></table></div>`;
+  document.getElementById('extraGraphs').innerHTML = cmp;
+
+  renderSteps('stepsContainer', r.steps);
+
+  const u = getUnits();
+  renderResultCards('resultCards', [
+    {label: 'Reaction Order', value: r.best_order.toFixed(3) + (r.rounded_order_hint !== null ? ` (~${r.rounded_order_hint})` : '')},
+    {label: 'Rate Constant k', value: fmt(r.k) + ' ' + kUnitsForOrder(r.best_order, u.conc, u.time)},
+    {label: 'Initial Conc. C_A0', value: fmt(r.CA0) + ' ' + u.conc},
+    {label: 'R²', value: fmt(r.regression.r2)},
+  ]);
+  document.getElementById('predictResult').innerHTML = '';
+}
+
+function updatePredictLabel() {
+  const mode = document.getElementById('predictMode').value;
+  const label = document.getElementById('predictInputLabel');
+  if (mode === 'concentration') label.innerText = 'Time, t';
+  else if (mode === 'time') label.innerText = 'Concentration, C';
+  else label.innerText = 'Concentration, C';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('predictMode').addEventListener('change', updatePredictLabel);
+});
+
+async function runPrediction() {
+  if (!lastResult) return;
+  const mode = document.getElementById('predictMode').value;
+  const value = parseFloat(document.getElementById('predictInput').value);
+  const box = document.getElementById('predictResult');
+  if (isNaN(value)) { box.innerHTML = '<div class="alert-quiet-error">Enter a valid number.</div>'; return; }
+  const params = { order: lastResult.best_order, k: lastResult.k, CA0: lastResult.CA0 };
+  try {
+    const resp = await fetch('/predict/integral', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mode, value, params })
+    });
+    const data = await resp.json();
+    if (!data.ok) { box.innerHTML = `<div class="alert-quiet-error">${data.error}</div>`; return; }
+    box.innerHTML = `<div class="alert-quiet-success"><b>${data.label}</b> = ${fmt(data.value, 6)}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="alert-quiet-error">Request failed: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}

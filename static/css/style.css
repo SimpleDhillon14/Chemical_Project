@@ -1,0 +1,224 @@
+/* ==========================================================================
+   Chemical Reaction Kinetics Analyzer
+   Color palette: "Quiet Luxury"
+   #F7E6CA  cream        #E8D59E  soft gold
+   #D9BBB0  dusty rose   #AD9C8E  taupe / mocha
+   ========================================================================== */
+
+:root {
+  --cream: #F7E6CA;
+  --gold: #E8D59E;
+  --rose: #D9BBB0;
+  --taupe: #AD9C8E;
+  --ink: #3a332c;
+  --ink-soft: #6b6259;
+  --white: #fffdf8;
+  --danger: #b3543f;
+  --success: #5c7a5c;
+  --radius: 14px;
+  --shadow: 0 6px 20px rgba(58, 51, 44, 0.10);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  background: linear-gradient(180deg, var(--cream) 0%, #fbf3e3 200px, #f5f1ea 100%);
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+.navbar-quiet {
+  background: var(--taupe) !important;
+}
+.navbar-quiet .navbar-brand,
+.navbar-quiet .nav-link {
+  color: var(--white) !important;
+  font-weight: 600;
+}
+.navbar-quiet .nav-link:hover { color: var(--cream) !important; }
+
+.hero {
+  padding: 3rem 1rem 2rem;
+  text-align: center;
+}
+.hero h1 {
+  font-weight: 800;
+  color: var(--ink);
+  letter-spacing: -0.5px;
+}
+.hero p.lead {
+  color: var(--ink-soft);
+  max-width: 700px;
+  margin: 0.75rem auto 0;
+}
+
+.method-card {
+  background: var(--white);
+  border: 1px solid var(--rose);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.5rem;
+  height: 100%;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.method-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 28px rgba(58, 51, 44, 0.16);
+}
+.method-card .badge-tag {
+  display: inline-block;
+  background: var(--gold);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  margin-bottom: 0.6rem;
+}
+.method-card h5 { font-weight: 700; }
+.method-card a.btn { margin-top: 0.75rem; }
+
+.panel {
+  background: var(--white);
+  border: 1px solid var(--rose);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem;
+  margin-bottom: 1.75rem;
+}
+.panel h4, .panel h3 {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom: 2px solid var(--gold);
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.btn-quiet {
+  background: var(--taupe);
+  border-color: var(--taupe);
+  color: var(--white);
+  font-weight: 600;
+}
+.btn-quiet:hover { background: #948474; border-color: #948474; color: var(--white); }
+
+.btn-outline-quiet {
+  border: 1.5px solid var(--taupe);
+  color: var(--taupe);
+  font-weight: 600;
+  background: transparent;
+}
+.btn-outline-quiet:hover { background: var(--taupe); color: var(--white); }
+
+.btn-gold {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
+  font-weight: 700;
+}
+.btn-gold:hover { background: #ddc686; border-color: #ddc686; }
+
+table.kinetics-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+table.kinetics-table th {
+  background: var(--gold);
+  color: var(--ink);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+}
+table.kinetics-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: center;
+  border-bottom: 1px solid #eee2cf;
+  font-size: 0.9rem;
+}
+table.kinetics-table input {
+  width: 100%;
+  border: 1px solid var(--rose);
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
+  text-align: center;
+}
+table.kinetics-table tr:hover td { background: #fbf3e3; }
+
+.remove-row-btn {
+  color: var(--danger);
+  cursor: pointer;
+  font-weight: 700;
+  border: none;
+  background: none;
+}
+
+.equation-box {
+  background: #fbf3e3;
+  border-left: 4px solid var(--taupe);
+  padding: 0.85rem 1.1rem;
+  border-radius: 8px;
+  font-family: "Cambria Math", Georgia, serif;
+  font-size: 1.05rem;
+  margin: 0.6rem 0;
+}
+
+.step-card {
+  border-left: 3px solid var(--gold);
+  padding: 0.6rem 1rem;
+  margin-bottom: 0.6rem;
+  background: #fffaf0;
+  border-radius: 0 8px 8px 0;
+}
+.step-card h6 { color: var(--taupe); font-weight: 700; margin-bottom: 0.25rem; }
+
+.result-card {
+  background: linear-gradient(135deg, var(--gold), var(--rose));
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  text-align: center;
+  box-shadow: var(--shadow);
+  height: 100%;
+}
+.result-card .label { font-size: 0.8rem; color: var(--ink-soft); font-weight: 600; text-transform: uppercase; }
+.result-card .value { font-size: 1.4rem; font-weight: 800; color: var(--ink); margin-top: 0.2rem; word-break: break-word; }
+
+.alert-quiet-error {
+  background: #fbe8e2;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: 10px;
+  padding: 0.85rem 1.1rem;
+}
+.alert-quiet-success {
+  background: #eaf1ea;
+  border: 1px solid var(--success);
+  color: var(--success);
+  border-radius: 10px;
+  padding: 0.6rem 1rem;
+}
+
+.loading-spinner {
+  display: none;
+  text-align: center;
+  padding: 2rem;
+}
+.loading-spinner .spinner-border { color: var(--taupe); }
+
+.footer-quiet {
+  background: var(--taupe);
+  color: var(--white);
+  text-align: center;
+  padding: 1rem;
+  margin-top: 3rem;
+  font-size: 0.85rem;
+}
+
+.plot-container { width: 100%; min-height: 420px; }
+
+.nav-pills-quiet .nav-link.active {
+  background: var(--taupe) !important;
+}
+.nav-pills-quiet .nav-link {
+  color: var(--ink);
+}

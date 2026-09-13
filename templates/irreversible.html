@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Irreversible Reaction{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Irreversible Series Reaction: A → R → S</h4>
+  <div class="equation-box">-r<sub>A</sub> = -dC<sub>A</sub>/dt = k₁·C<sub>A</sub> &nbsp;&nbsp; C<sub>A</sub> = C<sub>A0</sub>·e<sup>-k₁t</sup></div>
+  <p><b>X-axis = t</b>, <b>Y-axis = -ln(C<sub>A</sub>/C<sub>A0</sub>)</b>. Slope = k₁.</p>
+  <p>Optionally provide C<sub>R</sub> vs. t data (third column) to also fit k₂ from:</p>
+  <div class="equation-box">C<sub>R</sub> = C<sub>A0</sub>·k₁·[ e<sup>-k₁t</sup>/(k₂-k₁) + e<sup>-k₂t</sup>/(k₁-k₂) ]</div>
+</div>
+
+<div class="panel">
+  <h4>Enter Experimental Data</h4>
+  <div class="mb-3">
+    <label class="form-label">Upload CSV (columns: Time, Concentration, optionally C_R)</label>
+    <input type="file" id="csvUpload" accept=".csv" class="form-control">
+  </div>
+  <div style="overflow-x:auto">
+    <table class="kinetics-table" id="dataTableEl">
+      <thead><tr><th>Time</th><th>C_A</th><th>C_R (optional)</th><th></th></tr></thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-outline-quiet btn-sm mt-2" onclick="addRow('dataTableBody', true)">+ Add Row</button>
+  <div id="formError" style="display:none;" class="mt-3"></div>
+  <button class="btn btn-quiet mt-3" onclick="runAnalysis()">Analyze</button>
+</div>
+
+{% include "results.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+injectUnitSelectors('dataTableEl');
+for (let i = 0; i < 5; i++) addRow('dataTableBody', true);
+bindCSVUpload('csvUpload', 'dataTableBody', true, 'formError');
+
+let lastResult = null;
+
+async function runAnalysis() {
+  hideError('formError');
+  const payload = collectTableData('dataTableBody', true);
+  document.getElementById('resultsWrapper').style.display = 'none';
+  toggleLoading('loadingSpinner', true);
+  try {
+    const resp = await fetch('/analyze/irreversible', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    toggleLoading('loadingSpinner', false);
+    if (!data.ok) { showError('formError', data.error); return; }
+    lastResult = data.result;
+    renderIrrevResult(data.result);
+  } catch (e) {
+    toggleLoading('loadingSpinner', false);
+    showError('formError', 'Request failed: ' + e);
+  }
+}
+
+function renderIrrevResult(r) {
+  document.getElementById('resultsWrapper').style.display = 'block';
+  renderInputTable('inputDataTable', r.input_data);
+  document.getElementById('selectedMethodText').innerText = r.method;
+  document.getElementById('originalEquation').innerHTML = formatMath(r.original_equation);
+
+  renderTransformedTable('transformedTable', r.transformed_table, [
+    {key: 'time', label: 'Time'},
+    {key: 'CA', label: 'C_A'},
+    {key: 'y', label: '-ln(C_A/C_A0)'},
+  ]);
+
+  renderGraph('mainGraph', r.graph, 'Irreversible Series Reaction: k1 from C_A');
+
+  let extra = '';
+  if (r.k2 !== null) {
+    extra += `<h5 class="mt-4">C_R(t) nonlinear fit (k₂)</h5><div id="crGraph" class="plot-container" style="min-height:380px;"></div>`;
+    extra += `<p class="mt-2">t_max = ${fmt(r.t_max)}, C_R,max/C_A0 = ${fmt(r.CR_max_over_CA0)}, fit R² = ${fmt(r.cr_fit_r2)}</p>`;
+  } else {
+    extra += `<p class="text-muted mt-2">Provide C_R vs. t data to also estimate k₂, t_max, and C_R,max.</p>`;
+  }
+  document.getElementById('extraGraphs').innerHTML = extra;
+
+  if (r.k2 !== null && r.cr_data) {
+    const trace1 = {x: r.cr_data.map(d=>d.time), y: r.cr_data.map(d=>d.CR_experimental), mode:'markers', type:'scatter', name:'Experimental C_R', marker:{color:'#AD9C8E', size:9}};
+    const trace2 = {x: r.cr_data.map(d=>d.time), y: r.cr_data.map(d=>d.CR_model), mode:'lines', type:'scatter', name:'Model C_R(t)', line:{color:'#3a332c'}};
+    Plotly.newPlot('crGraph', [trace1, trace2], {xaxis:{title:'t'}, yaxis:{title:'C_R'}, plot_bgcolor:'#fffdf8', paper_bgcolor:'#fffdf8'}, {responsive:true});
+  }
+
+  renderSteps('stepsContainer', r.steps);
+
+  const u = getUnits();
+  const cards = [
+    {label: 'k₁', value: fmt(r.k1) + ' ' + kUnitsFirstOrder(u.time)},
+    {label: 'k₂', value: r.k2 !== null ? (fmt(r.k2) + ' ' + kUnitsFirstOrder(u.time)) : '—'},
+    {label: 'C_A0', value: fmt(r.CA0) + ' ' + u.conc},
+    {label: 'R² (C_A fit)', value: fmt(r.regression.r2)},
+  ];
+  renderResultCards('resultCards', cards);
+  document.getElementById('predictResult').innerHTML = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('predictMode').addEventListener('change', () => {
+    const mode = document.getElementById('predictMode').value;
+    document.getElementById('predictInputLabel').innerText = (mode === 'concentration') ? 'Time, t' : 'Concentration of A, C_A';
+  });
+});
+
+async function runPrediction() {
+  if (!lastResult) return;
+  const mode = document.getElementById('predictMode').value;
+  const value = parseFloat(document.getElementById('predictInput').value);
+  const box = document.getElementById('predictResult');
+  if (isNaN(value)) { box.innerHTML = '<div class="alert-quiet-error">Enter a valid number.</div>'; return; }
+  const params = { k1: lastResult.k1, k2: lastResult.k2, CA0: lastResult.CA0, species: 'A' };
+  try {
+    const resp = await fetch('/predict/irreversible', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mode, value, params })
+    });
+    const data = await resp.json();
+    if (!data.ok) { box.innerHTML = `<div class="alert-quiet-error">${data.error}</div>`; return; }
+    box.innerHTML = `<div class="alert-quiet-success"><b>${data.label}</b> = ${fmt(data.value, 6)}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="alert-quiet-error">Request failed: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}

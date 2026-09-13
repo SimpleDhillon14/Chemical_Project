@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Chemical Reaction Kinetics Analyzer{% endblock %}
+{% block content %}
+<div class="hero">
+  <h1>Chemical Reaction Kinetics Analyzer</h1>
+  <p class="lead">Analyze experimental concentration-time data using CRE graphical and mathematical methods.
+  An interactive application for analyzing experimental concentration-time data using Integral and Differential
+  methods, and specialized graphical methods for autocatalytic, reversible, and irreversible reactions —
+  every equation, transformation, graph, slope, and intercept is shown step by step.</p>
+</div>
+
+<div class="row g-4">
+
+  <div class="col-md-6 col-lg-4">
+    <div class="method-card">
+      <span class="badge-tag">Method 1</span>
+      <h5>Integral Method</h5>
+      <p>Guess a reaction order n, integrate the rate law, and test the straight-line plot of
+      C<sub>A</sub><sup>1-n</sup> (or -ln C<sub>A</sub>) vs. t. Supports zero, first, second, third,
+      and fractional orders via a systematic R² comparison.</p>
+      <a href="/integral" class="btn btn-quiet">Open Method →</a>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="method-card">
+      <span class="badge-tag">Method 2</span>
+      <h5>Differential Method</h5>
+      <p>Numerically differentiate C<sub>A</sub> vs. t to obtain -dC<sub>A</sub>/dt, then plot
+      log<sub>10</sub>(-dC<sub>A</sub>/dt) vs. log<sub>10</sub>(C<sub>A</sub>). Slope = order n,
+      intercept = log<sub>10</sub>(k), exactly per Fig. 3.18 of the course notes.</p>
+      <a href="/differential" class="btn btn-quiet">Open Method →</a>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="method-card">
+      <span class="badge-tag">Method 3</span>
+      <h5>Autocatalytic Reaction</h5>
+      <p>A + R → R + R. Uses the linear form ln[(M+X<sub>A</sub>)/(M(1-X<sub>A</sub>))] vs. t,
+      where M = C<sub>R0</sub>/C<sub>A0</sub>, to extract the rate constant k.</p>
+      <a href="/autocatalytic" class="btn btn-quiet">Open Method →</a>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="method-card">
+      <span class="badge-tag">Method 4</span>
+      <h5>Reversible Reaction</h5>
+      <p>A ⇌ R. Uses the equilibrium concentration C<sub>Ae</sub> and the linear form
+      -ln[(C<sub>A</sub>-C<sub>Ae</sub>)/(C<sub>A0</sub>-C<sub>Ae</sub>)] vs. t to find k₁ and k₂.</p>
+      <a href="/reversible" class="btn btn-quiet">Open Method →</a>
+    </div>
+  </div>
+
+  <div class="col-md-6 col-lg-4">
+    <div class="method-card">
+      <span class="badge-tag">Method 5</span>
+      <h5>Irreversible Reaction</h5>
+      <p>A → R → S (series). Extracts k₁ from -ln(C<sub>A</sub>/C<sub>A0</sub>) vs. t, and optionally
+      fits k₂ from C<sub>R</sub>(t) data, including t<sub>max</sub> and C<sub>R,max</sub>.</p>
+      <a href="/irreversible" class="btn btn-quiet">Open Method →</a>
+    </div>
+  </div>
+
+</div>
+
+<div class="panel mt-4 text-center">
+  <h5 class="mb-2">Not sure whether to use the Integral or Differential Method?</h5>
+  <p class="text-muted mb-3">Answer three quick questions about your data and get a recommendation.</p>
+  <a href="/which-method" class="btn btn-gold">Which Method Should I Use? →</a>
+</div>
+{% endblock %}

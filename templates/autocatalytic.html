@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Autocatalytic Reaction{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Autocatalytic Reaction: A + R → R + R</h4>
+  <div class="equation-box">-r<sub>A</sub> = -dC<sub>A</sub>/dt = k·C<sub>A</sub>·C<sub>R</sub></div>
+  <p>Total concentration C₀ = C<sub>A</sub> + C<sub>R</sub> = C<sub>A0</sub> + C<sub>R0</sub> is constant.
+  Let M = C<sub>R0</sub>/C<sub>A0</sub> (R can never be zero, so M &gt; 0). The linearized test is:</p>
+  <div class="equation-box">ln[(M + X<sub>A</sub>) / (M(1 - X<sub>A</sub>))] = C<sub>A0</sub>(M+1)·k·t</div>
+  <p><b>X-axis = t</b>, <b>Y-axis = ln[(M+X<sub>A</sub>)/(M(1-X<sub>A</sub>))]</b>. Slope = C<sub>A0</sub>(M+1)k.</p>
+</div>
+
+<div class="panel">
+  <h4>Enter Experimental Data</h4>
+  <div class="row g-3 mb-3">
+    <div class="col-md-4">
+      <label class="form-label">Initial concentration of R, C<sub>R0</sub> <span id="CR0unitLabel" class="text-muted"></span></label>
+      <input type="number" step="any" class="form-control" id="CR0input" placeholder="e.g. 0.5">
+    </div>
+    <div class="col-md-8">
+      <label class="form-label">Upload CSV (columns: Time, Concentration = C_A)</label>
+      <input type="file" id="csvUpload" accept=".csv" class="form-control">
+    </div>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="kinetics-table" id="dataTableEl">
+      <thead><tr><th>Time</th><th>C_A</th><th></th></tr></thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-outline-quiet btn-sm mt-2" onclick="addRow('dataTableBody', false)">+ Add Row</button>
+  <div id="formError" style="display:none;" class="mt-3"></div>
+  <button class="btn btn-quiet mt-3" onclick="runAnalysis()">Analyze</button>
+</div>
+
+{% include "results.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+injectUnitSelectors('dataTableEl');
+for (let i = 0; i < 5; i++) addRow('dataTableBody', false);
+bindCSVUpload('csvUpload', 'dataTableBody', false, 'formError');
+
+function syncCR0Unit() {
+  const el = document.getElementById('CR0unitLabel');
+  const sel = document.getElementById('concUnitSel');
+  if (el && sel) el.innerHTML = '(' + sel.value + ')';
+}
+document.addEventListener('DOMContentLoaded', () => {
+  syncCR0Unit();
+  document.getElementById('concUnitSel')?.addEventListener('change', syncCR0Unit);
+});
+
+let lastResult = null;
+
+async function runAnalysis() {
+  hideError('formError');
+  const payload = collectTableData('dataTableBody', false);
+  payload.CR0 = document.getElementById('CR0input').value;
+  if (!payload.CR0) { showError('formError', 'Please enter the initial concentration of R (C_R0).'); return; }
+  document.getElementById('resultsWrapper').style.display = 'none';
+  toggleLoading('loadingSpinner', true);
+  try {
+    const resp = await fetch('/analyze/autocatalytic', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    toggleLoading('loadingSpinner', false);
+    if (!data.ok) { showError('formError', data.error); return; }
+    lastResult = data.result;
+    renderAutoResult(data.result);
+  } catch (e) {
+    toggleLoading('loadingSpinner', false);
+    showError('formError', 'Request failed: ' + e);
+  }
+}
+
+function renderAutoResult(r) {
+  document.getElementById('resultsWrapper').style.display = 'block';
+  renderInputTable('inputDataTable', r.input_data);
+  document.getElementById('selectedMethodText').innerText = r.method;
+  document.getElementById('originalEquation').innerHTML = formatMath(r.original_equation);
+
+  renderTransformedTable('transformedTable', r.transformed_table, [
+    {key: 'time', label: 'Time'},
+    {key: 'CA', label: 'C_A'},
+    {key: 'CR', label: 'C_R'},
+    {key: 'XA', label: 'X_A'},
+    {key: 'y', label: 'ln[(M+X_A)/(M(1-X_A))]'},
+  ]);
+
+  renderGraph('mainGraph', r.graph, 'Autocatalytic Reaction');
+  document.getElementById('extraGraphs').innerHTML = `<p class="mt-2">M = C_R0/C_A0 = ${fmt(r.M)}, C₀ (total) = ${fmt(r.C0_total)}</p>`;
+
+  renderSteps('stepsContainer', r.steps);
+
+  const u = getUnits();
+  renderResultCards('resultCards', [
+    {label: 'Rate Constant k', value: fmt(r.k) + ' ' + kUnitsSecondOrderLike(u.conc, u.time)},
+    {label: 'C_A0', value: fmt(r.CA0) + ' ' + u.conc},
+    {label: 'M = C_R0/C_A0', value: fmt(r.M) + ' (dimensionless)'},
+    {label: 'R²', value: fmt(r.regression.r2)},
+  ]);
+  document.getElementById('predictResult').innerHTML = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('predictMode').addEventListener('change', () => {
+    const mode = document.getElementById('predictMode').value;
+    document.getElementById('predictInputLabel').innerText = (mode === 'concentration') ? 'Time, t' : 'Concentration, C_A';
+  });
+});
+
+async function runPrediction() {
+  if (!lastResult) return;
+  const mode = document.getElementById('predictMode').value;
+  const value = parseFloat(document.getElementById('predictInput').value);
+  const box = document.getElementById('predictResult');
+  if (isNaN(value)) { box.innerHTML = '<div class="alert-quiet-error">Enter a valid number.</div>'; return; }
+  const params = { k: lastResult.k, CA0: lastResult.CA0, M: lastResult.M, C0_total: lastResult.C0_total };
+  try {
+    const resp = await fetch('/predict/autocatalytic', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mode, value, params })
+    });
+    const data = await resp.json();
+    if (!data.ok) { box.innerHTML = `<div class="alert-quiet-error">${data.error}</div>`; return; }
+    box.innerHTML = `<div class="alert-quiet-success"><b>${data.label}</b> = ${fmt(data.value, 6)}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="alert-quiet-error">Request failed: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Which Method Should I Use?{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Which Method Should I Use: Integral or Differential?</h4>
+  <p>Both methods fit <b>-r<sub>A</sub> = k·C<sub>A</sub><sup>n</sup></b> to your C<sub>A</sub> vs. t data,
+  but they get there differently, and one usually suits your data better than the other:</p>
+  <ul>
+    <li><b>Integral Method</b> &mdash; guesses an order, integrates the rate law, and tests linearity
+    for each candidate order (0, 1, 2, 3, ...). It works on the raw concentration data directly, so it's
+    <b>more forgiving of noisy, sparse, or unevenly-spaced data</b>.</li>
+    <li><b>Differential Method</b> &mdash; numerically differentiates C<sub>A</sub> vs. t to get the
+    instantaneous rate at every point, then reads the order directly off a single log-log slope
+    (fractional orders included, no guessing needed). Differentiation amplifies noise, so it
+    <b>needs dense, smooth, evenly-spaced data</b> to be reliable.</li>
+  </ul>
+  <p class="text-muted mb-0"><small>Answer the three questions below and the app will recommend a starting point &mdash;
+  you can always run both and compare the R² values, which is good practice anyway.</small></p>
+</div>
+
+<div class="panel">
+  <h5>1. What does your concentration-time data look like?</h5>
+  <div class="mb-3">
+    <div class="form-check"><input class="form-check-input" type="radio" name="q1" id="q1a" value="diff"><label class="form-check-label" for="q1a">Smooth and fairly closely spaced in time</label></div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="q1" id="q1b" value="int" checked><label class="form-check-label" for="q1b">Noisy / scattered measurements</label></div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="q1" id="q1c" value="int"><label class="form-check-label" for="q1c">Sparse or unevenly spaced in time</label></div>
+  </div>
+
+  <h5>2. How many data points do you have?</h5>
+  <div class="mb-3">
+    <div class="form-check"><input class="form-check-input" type="radio" name="q2" id="q2a" value="int" checked><label class="form-check-label" for="q2a">Few &mdash; roughly 3 to 8 points</label></div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="q2" id="q2b" value="diff"><label class="form-check-label" for="q2b">Many &mdash; 10+ points, densely sampled</label></div>
+  </div>
+
+  <h5>3. What do you want out of the analysis?</h5>
+  <div class="mb-3">
+    <div class="form-check"><input class="form-check-input" type="radio" name="q3" id="q3a" value="int" checked><label class="form-check-label" for="q3a">Systematically check order 0, 1, 2, 3... and see which fits best (R² comparison table)</label></div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="q3" id="q3b" value="diff"><label class="form-check-label" for="q3b">Read the order directly off one line, including fractional orders, without checking each order by hand</label></div>
+  </div>
+
+  <button class="btn btn-quiet" onclick="recommend()">Get Recommendation</button>
+  <div id="recoBox" class="mt-4"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function recommend() {
+  const answers = [
+    document.querySelector('input[name="q1"]:checked')?.value,
+    document.querySelector('input[name="q2"]:checked')?.value,
+    document.querySelector('input[name="q3"]:checked')?.value,
+  ];
+  const intScore = answers.filter(a => a === 'int').length;
+  const diffScore = answers.filter(a => a === 'diff').length;
+
+  const box = document.getElementById('recoBox');
+  if (intScore >= diffScore) {
+    box.innerHTML = `
+      <div class="alert-quiet-success">
+        <h5 class="mb-2">Recommended: Integral Method</h5>
+        <p class="mb-2">Your answers point to noisier, sparser, or unevenly-spaced data, or you want a
+        systematic order-by-order comparison &mdash; that's exactly what the Integral Method is built for.
+        It works on the raw concentration values (no numerical differentiation), so it stays stable with
+        fewer or messier points.</p>
+        <a href="/integral" class="btn btn-gold btn-sm">Open Integral Method →</a>
+      </div>`;
+  } else {
+    box.innerHTML = `
+      <div class="alert-quiet-success">
+        <h5 class="mb-2">Recommended: Differential Method</h5>
+        <p class="mb-2">Your answers point to dense, smooth, evenly-spaced data &mdash; ideal for numerical
+        differentiation. The Differential Method will read the reaction order directly off a single
+        log-log slope, including fractional orders, without needing to test each order in turn.</p>
+        <a href="/differential" class="btn btn-gold btn-sm">Open Differential Method →</a>
+      </div>`;
+  }
+  box.innerHTML += `<p class="text-muted mt-2"><small>Tip: when in doubt, run both and compare R² &mdash;
+  the method with the higher R² is the better description of your data.</small></p>`;
+}
+</script>
+{% endblock %}

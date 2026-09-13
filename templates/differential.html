@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Differential Method{% endblock %}
+{% block content %}
+<div class="panel">
+  <h4>Differential Method of Analysis</h4>
+  <p>Directly follows CRE_Diff.pdf, Chapter 3: the slope dC<sub>A</sub>/dt is evaluated at each
+  composition (numerically, via central differences at interior points and forward/backward
+  differences at the endpoints — the numerical equivalent of "draw a smooth curve and read its slope").</p>
+  <div class="equation-box">log₁₀(-dC<sub>A</sub>/dt) = log₁₀(k) + n·log₁₀(C<sub>A</sub>)</div>
+  <p>Plotting log₁₀(-dC<sub>A</sub>/dt) vs. log₁₀(C<sub>A</sub>) gives a straight line whose
+  <b>slope = n</b> (reaction order) and whose <b>intercept = log₁₀(k)</b> (Fig. 3.18).</p>
+  <p class="text-muted mb-0"><small>Unlike the Integral Method, this method doesn't need to test order 0, 1, 2, 3... one
+  at a time &mdash; the slope of this single log-log line <i>is</i> the order directly, fractional values included.</small></p>
+</div>
+
+<div class="panel">
+  <h4>Enter Experimental Data</h4>
+  <div class="mb-3">
+    <label class="form-label">Upload CSV (columns: Time, Concentration)</label>
+    <input type="file" id="csvUpload" accept=".csv" class="form-control">
+  </div>
+  <div style="overflow-x:auto">
+    <table class="kinetics-table" id="dataTableEl">
+      <thead><tr><th>Time</th><th>Concentration</th><th></th></tr></thead>
+      <tbody id="dataTableBody"></tbody>
+    </table>
+  </div>
+  <button class="btn btn-outline-quiet btn-sm mt-2" onclick="addRow('dataTableBody', false)">+ Add Row</button>
+  <div id="formError" style="display:none;" class="mt-3"></div>
+  <button class="btn btn-quiet mt-3" onclick="runAnalysis()">Analyze</button>
+</div>
+
+{% include "results.html" %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+injectUnitSelectors('dataTableEl');
+const seed = [[0,10],[20,8],[40,6],[60,5],[120,3],[180,2],[300,1]];
+seed.forEach(() => addRow('dataTableBody', false));
+document.querySelectorAll('#dataTableBody tr').forEach((row, i) => {
+  row.querySelector('.time-input').value = seed[i][0];
+  row.querySelector('.conc-input').value = seed[i][1];
+});
+bindCSVUpload('csvUpload', 'dataTableBody', false, 'formError');
+
+let lastResult = null;
+
+async function runAnalysis() {
+  hideError('formError');
+  const payload = collectTableData('dataTableBody', false);
+  document.getElementById('resultsWrapper').style.display = 'none';
+  toggleLoading('loadingSpinner', true);
+  try {
+    const resp = await fetch('/analyze/differential', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    toggleLoading('loadingSpinner', false);
+    if (!data.ok) { showError('formError', data.error); return; }
+    lastResult = data.result;
+    renderDiffResult(data.result);
+  } catch (e) {
+    toggleLoading('loadingSpinner', false);
+    showError('formError', 'Request failed: ' + e);
+  }
+}
+
+function renderDiffResult(r) {
+  document.getElementById('resultsWrapper').style.display = 'block';
+  renderInputTable('inputDataTable', r.input_data);
+  document.getElementById('selectedMethodText').innerText = r.method;
+  document.getElementById('originalEquation').innerHTML = formatMath(r.original_equation);
+
+  renderTransformedTable('transformedTable', r.transformed_table, [
+    {key: 'time', label: 'Time'},
+    {key: 'concentration', label: 'C_A'},
+    {key: 'neg_dCdt', label: '-dC_A/dt'},
+    {key: 'log_C', label: 'log10(C_A)'},
+    {key: 'log_rate', label: 'log10(-dC_A/dt)'},
+  ]);
+
+  renderGraph('mainGraph', r.graph, `Differential Method: n = ${r.n_order.toFixed(3)}`);
+
+  let extra = '';
+  if (r.michaelis_menten_check) {
+    extra += `<h5 class="mt-4">Optional check: Michaelis-Menten form -r_A = k1·C_A/(1+k2·C_A) (Eqs. 61 &amp; 62)</h5>`;
+    extra += `<div id="mmGraph61" class="plot-container" style="min-height:350px;"></div>`;
+    extra += `<div id="mmGraph62" class="plot-container" style="min-height:350px;"></div>`;
+  }
+  document.getElementById('extraGraphs').innerHTML = extra;
+  if (r.michaelis_menten_check) {
+    renderGraph('mmGraph61', r.michaelis_menten_check.eq61, 'Eq. 61: 1/(-r_A) vs 1/C_A');
+    renderGraph('mmGraph62', r.michaelis_menten_check.eq62, 'Eq. 62: -r_A vs (-r_A)/C_A');
+  }
+
+  renderSteps('stepsContainer', r.steps);
+
+  const u = getUnits();
+  renderResultCards('resultCards', [
+    {label: 'Reaction Order', value: r.n_order.toFixed(3) + (r.rounded_order_hint !== null ? ` (~${r.rounded_order_hint})` : '')},
+    {label: 'Rate Constant k', value: fmt(r.k) + ' ' + kUnitsForOrder(r.n_order, u.conc, u.time)},
+    {label: 'R²', value: fmt(r.regression.r2)},
+    {label: 'Final Rate Law', value: r.rate_law_str},
+  ]);
+  document.getElementById('predictResult').innerHTML = '';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('predictMode').addEventListener('change', () => {
+    const mode = document.getElementById('predictMode').value;
+    document.getElementById('predictInputLabel').innerText = (mode === 'concentration') ? 'Time, t' : 'Concentration, C';
+  });
+});
+
+async function runPrediction() {
+  if (!lastResult) return;
+  const mode = document.getElementById('predictMode').value;
+  const value = parseFloat(document.getElementById('predictInput').value);
+  const box = document.getElementById('predictResult');
+  if (isNaN(value)) { box.innerHTML = '<div class="alert-quiet-error">Enter a valid number.</div>'; return; }
+  const params = { order: lastResult.n_order, k: lastResult.k, CA0: lastResult.prediction.CA0 };
+  try {
+    const resp = await fetch('/predict/differential', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ mode, value, params })
+    });
+    const data = await resp.json();
+    if (!data.ok) { box.innerHTML = `<div class="alert-quiet-error">${data.error}</div>`; return; }
+    box.innerHTML = `<div class="alert-quiet-success"><b>${data.label}</b> = ${fmt(data.value, 6)}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="alert-quiet-error">Request failed: ${e}</div>`;
+  }
+}
+</script>
+{% endblock %}
